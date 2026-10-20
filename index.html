@@ -1,0 +1,853 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Klo-Liste">
+<meta name="theme-color" content="#2e7d32">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" href="icon-192.png">
+<title>Klo-Liste</title>
+<style>
+  * { box-sizing: border-box; -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent; -webkit-touch-callout: none; }
+  html, body { height: 100%; margin: 0; }
+  body { font-family: -apple-system, Roboto, "Segoe UI", Arial, sans-serif; background: #f2f2f2; color: #222; display: flex; flex-direction: column; overflow: hidden; touch-action: manipulation; }
+  header { display: flex; justify-content: space-between; align-items: center; padding: 8px 14px; background: #fff; border-bottom: 1px solid #ddd; font-size: 18px; }
+  header .clock { font-weight: bold; }
+  header .period { color: #666; margin-left: 10px; }
+  header .gear { font-size: 22px; padding: 6px 10px; color: #888; }
+  header .today-btn { font-size: 15px; padding: 6px 14px; border: none; border-radius: 8px; background: #e8e8e8; color: #444; margin-left: 10px; }
+  .soft .box h2 { color: #8a6d00; }
+  main { flex: 1; overflow-y: auto; padding: 14px; }
+  .view { display: none; height: 100%; }
+  .view.active { display: flex; flex-direction: column; }
+  .big-buttons { flex: 1; display: flex; gap: 16px; }
+  .big-buttons button { flex: 1; font-size: 34px; font-weight: bold; border: none; border-radius: 18px; color: #fff; padding: 20px; line-height: 1.2; }
+  .btn-go { background: #2e7d32; }
+  .btn-back { background: #1565c0; }
+  .btn-go:active, .btn-back:active { opacity: .8; }
+  .subtitle { font-size: 17px; font-weight: normal; opacity: .9; display: block; margin-top: 10px; }
+  .notice { background: #fff3cd; color: #664d03; border: 1px solid #ffe69c; border-radius: 10px; padding: 8px 12px; font-size: 15px; margin-bottom: 10px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+  .grid button { font-size: 22px; padding: 22px 8px; border: none; border-radius: 12px; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.2); color: #222; }
+  .grid button:active { background: #ddd; }
+  .grid button.out { background: #e0e0e0; color: #999; }
+  .grid button .since { display: block; font-size: 14px; color: #666; margin-top: 4px; }
+  .legend { font-size: 15px; color: #666; margin-bottom: 10px; }
+  .toolbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+  .toolbar h2 { margin: 0; font-size: 22px; }
+  .cancel { font-size: 18px; padding: 10px 18px; border: none; border-radius: 10px; background: #ccc; color: #222; }
+  .empty { font-size: 22px; color: #666; text-align: center; margin-top: 40px; }
+  .toast { position: fixed; left: 50%; bottom: 30px; transform: translateX(-50%); background: #222; color: #fff; padding: 16px 28px; border-radius: 12px; font-size: 22px; opacity: 0; transition: opacity .2s; pointer-events: none; max-width: 90%; text-align: center; z-index: 20; }
+  .toast.show { opacity: 1; }
+  /* Dunkel bei Ruhe */
+  .dim { position: fixed; left: 0; top: 0; right: 0; bottom: 0; display: none; flex-direction: column; align-items: center; justify-content: center; background: #000; z-index: 40; }
+  .dim.show { display: flex; }
+  .dim-clock { font-size: 64px; color: #2a2a2a; }
+  .dim-hint { font-size: 20px; color: #222; margin-top: 10px; }
+  .check { position: fixed; left: 0; top: 0; right: 0; bottom: 0; display: none; flex-direction: column; align-items: center; justify-content: center; color: #fff; z-index: 10; }
+  .check.show { display: flex; }
+  .check.go { background: #2e7d32; }
+  .check.back { background: #1565c0; }
+  .check .mark { font-size: 160px; line-height: 1; }
+  .check .who { font-size: 44px; font-weight: bold; margin-top: 10px; }
+  .check .what { font-size: 24px; opacity: .9; margin-top: 6px; }
+  /* Sperre: zu viele unterwegs */
+  .block { position: fixed; left: 0; top: 0; right: 0; bottom: 0; display: none; align-items: center; justify-content: center; background: rgba(0,0,0,.55); z-index: 10; padding: 20px; }
+  .block.show { display: flex; }
+  .block .box { background: #fff; border-radius: 16px; padding: 26px; max-width: 520px; width: 100%; text-align: center; }
+  .block .box h2 { margin: 0 0 10px; font-size: 26px; }
+  .block .box p { font-size: 20px; margin: 0 0 20px; }
+  .block .box .row { display: flex; gap: 12px; justify-content: center; }
+  .block .box button { font-size: 20px; padding: 14px 22px; border: none; border-radius: 12px; }
+  .block .ok { background: #1565c0; color: #fff; }
+  .block .exc { background: #eee; color: #444; font-size: 16px; }
+  /* Lehrerbereich */
+  .admin label { display: block; font-size: 16px; margin: 14px 0 4px; color: #444; }
+  .admin input, .admin textarea { width: 100%; font-size: 18px; padding: 10px; border: 1px solid #bbb; border-radius: 8px; -webkit-user-select: text; user-select: text; }
+  .admin textarea { height: 260px; font-family: inherit; }
+  .admin .actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 14px; }
+  .admin .actions button, .admin .login button { font-size: 17px; padding: 12px 18px; border: none; border-radius: 10px; background: #1565c0; color: #fff; }
+  .admin .actions button.danger { background: #c62828; }
+  .admin .actions button.grey { background: #777; }
+  .admin .login { display: flex; gap: 10px; align-items: flex-end; max-width: 400px; }
+  .admin table { width: 100%; border-collapse: collapse; font-size: 15px; margin-top: 10px; background: #fff; }
+  .admin th, .admin td { border: 1px solid #ddd; padding: 6px 8px; text-align: left; }
+  .admin th { background: #eee; }
+  .admin td.num { text-align: right; }
+  .admin td button { font-size: 14px; padding: 4px 10px; border: none; border-radius: 6px; background: #c62828; color: #fff; }
+  .admin .hint { font-size: 14px; color: #666; margin-top: 6px; }
+  .admin h3 { margin: 26px 0 6px; font-size: 18px; }
+  .admin .cols { display: flex; gap: 20px; flex-wrap: wrap; }
+  .admin .cols > div { flex: 1; min-width: 260px; }
+  .admin .tt { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
+  .admin .tt span { width: 28px; font-size: 16px; color: #444; }
+  .admin .tt input { flex: 1; }
+  .admin .check-row { display: flex; align-items: center; gap: 10px; margin-top: 14px; font-size: 16px; color: #444; }
+  .admin .check-row input { width: 24px; height: 24px; }
+</style>
+</head>
+<body>
+
+<header>
+  <div><span id="today"></span> &nbsp; <span class="clock" id="clock"></span><span class="period" id="periodNow"></span></div>
+  <div><span id="openCount"></span> <button class="today-btn" id="btnToday">Heute</button> <span class="gear" id="gear">&#9881;</span></div>
+</header>
+
+<main>
+  <section class="view active" id="view-home">
+    <div class="notice" id="exportNotice" style="display:none"></div>
+    <div class="big-buttons">
+      <button class="btn-go" id="btnGo">Ich gehe aufs Klo<span class="subtitle">Namen antippen</span></button>
+      <button class="btn-back" id="btnBack">Ich komme zurück<span class="subtitle" id="backSub"></span></button>
+    </div>
+  </section>
+
+  <section class="view" id="view-go">
+    <div class="toolbar"><h2>Wer geht aufs Klo?</h2><button class="cancel" data-nav="home">Abbrechen</button></div>
+    <div class="legend" id="goLegend"></div>
+    <div class="grid" id="gridGo"></div>
+  </section>
+
+  <section class="view" id="view-back">
+    <div class="toolbar"><h2>Wer kommt zurück?</h2><button class="cancel" data-nav="home">Abbrechen</button></div>
+    <div class="grid" id="gridBack"></div>
+    <div class="empty" id="backEmpty" style="display:none">Niemand ist gerade eingetragen.</div>
+  </section>
+
+  <section class="view admin" id="view-today">
+    <div class="toolbar"><h2>Heute</h2><button class="cancel" data-nav="home">Schließen</button></div>
+    <div id="todayTableRO"></div>
+  </section>
+
+  <section class="view admin" id="view-admin">
+    <div class="toolbar"><h2>Lehrerbereich</h2><button class="cancel" data-nav="home">Schließen</button></div>
+
+    <div id="adminLogin">
+      <div class="login">
+        <div style="flex:1"><label id="pinLabel">Passwort</label><input type="password" id="pin" inputmode="numeric"></div>
+        <button id="pinOk">Öffnen</button>
+      </div>
+      <div class="hint" id="pinHint" style="display:none">Beim ersten Öffnen hier ein Passwort festlegen. Es öffnet später den Lehrerbereich und erlaubt Ausnahmen.</div>
+    </div>
+
+    <div id="adminContent" style="display:none">
+      <h3>Export und Sicherung</h3>
+      <div class="hint" id="statLine"></div>
+      <div class="actions">
+        <button id="btnExport">Als Excel exportieren</button>
+        <button id="btnExportWeek">Nur letzte 7 Tage exportieren</button>
+        <button id="btnExportClear" class="danger">Exportieren und Liste leeren</button>
+        <button id="btnBackup" class="grey">Sicherung (JSON) speichern</button>
+        <button id="btnRestore" class="grey">Sicherung einlesen</button>
+        <input type="file" id="restoreFile" accept=".json,application/json" style="display:none">
+      </div>
+      <div class="hint">Am iPad öffnet sich beim Export das Teilen-Menü (Mail, In Dateien sichern, Drive). Auf anderen Tablets landen die Dateien im Download-Ordner. Die Sicherung enthält alle Einträge und Einstellungen und kann auf einem anderen Gerät eingelesen werden. Über „Sicherung einlesen“ lässt sich auch eine vorbereitete Klassendatei (Namen und Stundenplan) laden.</div>
+
+      <h3>Heute</h3>
+      <div id="todayTable"></div>
+
+      <h3>Auswertung pro Kind (alle gespeicherten Einträge)</h3>
+      <div id="statsTable"></div>
+
+      <h3>Einstellungen</h3>
+      <div class="cols">
+        <div>
+          <label>Namen, einer pro Zeile, dahinter m oder w</label>
+          <textarea id="names"></textarea>
+        </div>
+        <div>
+          <label>Klasse (erscheint im Titel und im Dateinamen)</label>
+          <input type="text" id="className" maxlength="12">
+          <label>Automatisch austragen nach (Minuten)</label>
+          <input type="number" id="limit" min="1" max="120">
+          <label>Gleichzeitig unterwegs, höchstens pro Gruppe (Mädchen / Buben)</label>
+          <input type="number" id="maxOut" min="1" max="10">
+          <label>Export-Erinnerung nach (Tagen)</label>
+          <input type="number" id="exportDays" min="1" max="60">
+          <label>Bildschirm wach halten Mo–Fr von / bis (sonst sperrt sich das Tablet selbst)</label>
+          <div class="tt"><input type="time" id="awakeFrom"><span style="text-align:center">bis</span><input type="time" id="awakeTo"></div>
+          <label>Bildschirm dunkel nach (Minuten ohne Antippen, 0 = nie)</label>
+          <input type="number" id="dimAfter" min="0" max="60">
+          <label>Neues Passwort (leer lassen, wenn es bleiben soll)</label>
+          <input type="password" id="newPin">
+        </div>
+      </div>
+      <label>Stundenplan: Fächer der 1., 2., 3. … Stunde mit Leerzeichen getrennt, - für eine freie Stunde</label>
+      <div class="tt"><span>Mo</span><input type="text" id="tt1"></div>
+      <div class="tt"><span>Di</span><input type="text" id="tt2"></div>
+      <div class="tt"><span>Mi</span><input type="text" id="tt3"></div>
+      <div class="tt"><span>Do</span><input type="text" id="tt4"></div>
+      <div class="tt"><span>Fr</span><input type="text" id="tt5"></div>
+      <label class="check-row"><input type="checkbox" id="rule4"> In der 4. Stunde (nach der großen Pause) nachfragen: „Musst du wirklich?“</label>
+      <div class="actions">
+        <button id="btnSave">Einstellungen speichern</button>
+        <button id="btnClearAll" class="danger">Alle Einträge löschen</button>
+      </div>
+    </div>
+  </section>
+</main>
+
+<div class="toast" id="toast"></div>
+<div class="dim" id="dim"><div class="dim-clock" id="dimClock"></div><div class="dim-hint">Antippen</div></div>
+<video id="awake" muted loop playsinline webkit-playsinline style="position:fixed;width:2px;height:2px;opacity:0;pointer-events:none"><source src="data:video/webm;base64,GkXfo59ChoEBQveBAULygQRC84EIQoKEd2VibUKHgQJChYECGFOAZwEAAAAAAAOYEU2bdLpNu4tTq4QVSalmU6yBoU27i1OrhBZUrmtTrIHYTbuMU6uEElTDZ1OsggEeTbuMU6uEHFO7a1OsggOC7AEAAAAAAABZAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAVSalmsirXsYMPQkBNgI1MYXZmNjAuMTYuMTAwV0GNTGF2ZjYwLjE2LjEwMESJiECfQAAAAAAAFlSua8GuAQAAAAAAADjXgQFzxYihAuMxTjlRTJyBACK1nIN1bmSIgQCGhVZfVlA4g4EBI+ODhAX14QDgibCBELqBEJqBAhJUw2f8c3OgY8CAZ8iaRaOHRU5DT0RFUkSHjUxhdmY2MC4xNi4xMDBzc9ZjwItjxYihAuMxTjlRTGfIoUWjh0VOQ09ERVJEh5RMYXZjNjAuMzEuMTAyIGxpYnZweGfIoUWjiERVUkFUSU9ORIeTMDA6MDA6MDIuMDAwMDAwMDAwAB9DtnVB3eeBAKOjgQAAgBACAJ0BKhAAEAAARwiFhYiFhIgCAgAMDWAA/v+rUICjlYEAZACxAQABEBAAGAAYWC/0AAgAAKOVgQDIALEBAAEQEAAYABhYL/QACAAAo5WBASwAsQEAARAQABgAGFgv9AAIAACjlYEBkACxAQABEBAAGAAYWC/0AAgAAKOVgQH0ALEBAAEQEAAYABhYL/QACAAAo5WBAlgAsQEAARAQABgAGFgv9AAIAACjlYECvACxAQABEBAUYABhYL/QACAAAKOVgQMgALEBAAEQEAAYABhYL/QACAAAo5WBA4QAsQEAARAQABgAGFgv9AAIAACjlYED6ACxAQABEBAAGAAYWC/0AAgAAKOVgQRMALEBAAEQEAAYABhYL/QACAAAo5WBBLAAsQEAARAQABgAGFgv9AAIAACjlYEFFACxAQABEBAAGAAYWC/0AAgAAKOVgQV4ALEBAAEQEAAYABhYL/QACAAAo5WBBdwAsQEAARAQABgAGFgv9AAIAACjlYEGQACxAQABEBAAGAAYWC/0AAgAAKOVgQakALEBAAEQEAAYABhYL/QACAAAo5WBBwgAsQEAARAQFGAAYWC/0AAgAACjlYEHbACxAQABEBAAGAAYWC/0AAgAABxTu2uRu4+zgQC3iveBAfGCAZ/wgQM=" type="video/webm"></video>
+<div class="check" id="check"><div class="mark">&#10003;</div><div class="who" id="checkWho"></div><div class="what" id="checkWhat"></div></div>
+<div class="block" id="block"><div class="box"><h2 id="blockTitle"></h2><p id="blockText"></p><div class="row"><button class="ok" id="blockOk">OK, ich warte</button><button class="exc" id="blockExc">Ausnahme (Lehrer)</button></div></div></div>
+
+<script>
+(function () {
+  'use strict';
+
+  var KEY_ENTRIES = 'klo_entries';
+  var KEY_SETTINGS = 'klo_settings';
+
+  // Namen, Klasse, Stundenplan und Passwort stehen nicht in dieser Datei, sondern werden am Gerät
+  // im Lehrerbereich eingetragen oder als Klassendatei (Sicherung) eingelesen.
+
+  // Unterrichtszeiten der Schule (Montag = 1 … Freitag = 5). Zeiten in Minuten seit Mitternacht.
+  var SLOTS = [
+    { n: 1, s: 8 * 60, e: 8 * 60 + 50 }, { n: 2, s: 8 * 60 + 55, e: 9 * 60 + 45 }, { n: 3, s: 9 * 60 + 50, e: 10 * 60 + 40 },
+    { n: 4, s: 10 * 60 + 55, e: 11 * 60 + 45 }, { n: 5, s: 11 * 60 + 50, e: 12 * 60 + 40 }, { n: 6, s: 12 * 60 + 45, e: 13 * 60 + 35 },
+    { n: 7, s: 13 * 60 + 40, e: 14 * 60 + 30 }, { n: 8, s: 14 * 60 + 30, e: 15 * 60 + 20 }, { n: 9, s: 15 * 60 + 20, e: 16 * 60 + 10 },
+    { n: 10, s: 16 * 60 + 10, e: 17 * 60 }
+  ];
+  var WEEKDAYS = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'];
+
+  // Liefert { stunde: 'Text', fach: 'Kürzel' } für einen Zeitpunkt
+  function periodOf(d) {
+    var day = d.getDay(), m = d.getHours() * 60 + d.getMinutes();
+    if (day === 0 || day === 6) return { stunde: 'Wochenende', fach: '' };
+    if (m < SLOTS[0].s) return { stunde: 'vor dem Unterricht', fach: '' };
+    for (var i = 0; i < SLOTS.length; i++) {
+      var sl = SLOTS[i];
+      if (m >= sl.s && m < sl.e) return { stunde: sl.n + '. Stunde', fach: (settings.timetable[day] && settings.timetable[day][sl.n]) || '' };
+      if (i < SLOTS.length - 1 && m >= sl.e && m < SLOTS[i + 1].s) {
+        return { stunde: (sl.n === 3 ? 'große Pause' : 'Pause nach ' + sl.n + '. Stunde'), fach: '' };
+      }
+    }
+    return { stunde: 'nach dem Unterricht', fach: '' };
+  }
+
+  var settings = loadSettings();
+  var entries = loadEntries();
+
+  // ---------- Speicher ----------
+  function loadSettings() {
+    var s = null;
+    try { s = JSON.parse(localStorage.getItem(KEY_SETTINGS)); } catch (e) {}
+    return fixSettings(s || {});
+  }
+  // Fehlende Werte ergänzen (neues Gerät, alte Sicherung, Klassendatei)
+  function fixSettings(s) {
+    if (!Array.isArray(s.names)) s.names = [];
+    s.names = s.names.map(function (p) { return typeof p === 'string' ? { n: p, g: '?' } : p; });
+    if (typeof s.className !== 'string') s.className = '';
+    if (!s.timetable || typeof s.timetable !== 'object') s.timetable = {};
+    if (typeof s.rule4 !== 'boolean') s.rule4 = true;
+    if (!s.limit) s.limit = 15;
+    if (!s.maxOut) s.maxOut = 2;
+    if (!s.exportDays) s.exportDays = 7;
+    if (!s.pin) s.pin = '';
+    if (!s.lastExport) s.lastExport = Date.now();
+    if (!/^\d\d?:\d\d$/.test(s.awakeFrom || '')) s.awakeFrom = '07:30';
+    if (!/^\d\d?:\d\d$/.test(s.awakeTo || '')) s.awakeTo = '16:00';
+    if (typeof s.dimAfter !== 'number') s.dimAfter = 3;
+    return s;
+  }
+  function saveSettings() { try { localStorage.setItem(KEY_SETTINGS, JSON.stringify(settings)); } catch (e) { toast('Speichern nicht möglich'); } }
+  function loadEntries() {
+    try { return JSON.parse(localStorage.getItem(KEY_ENTRIES)) || []; } catch (e) { return []; }
+  }
+  function saveEntries() { try { localStorage.setItem(KEY_ENTRIES, JSON.stringify(entries)); } catch (e) { toast('Speichern nicht möglich'); } }
+  function classLabel() { return settings.className ? ' ' + settings.className : ''; }
+  function fileClass() { return settings.className ? settings.className.replace(/[^A-Za-z0-9äöüÄÖÜß-]/g, '') + '_' : ''; }
+
+  // ---------- Hilfsfunktionen ----------
+  function pad(n) { return (n < 10 ? '0' : '') + n; }
+  function fmtDate(d) { return pad(d.getDate()) + '.' + pad(d.getMonth() + 1) + '.' + d.getFullYear(); }
+  function fmtTime(d) { return pad(d.getHours()) + ':' + pad(d.getMinutes()); }
+  function minutesBetween(a, b) { return Math.round((b - a) / 60000); }
+  function dayKey(d) { return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()); }
+  function esc(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+  function genderOf(name) {
+    for (var i = 0; i < settings.names.length; i++) if (settings.names[i].n === name) return settings.names[i].g;
+    return '?';
+  }
+  function groupLabel(g) { return g === 'w' ? 'Mädchen' : (g === 'm' ? 'Buben' : 'Kinder'); }
+  function openEntries() { return entries.filter(function (e) { return e.status === 'open'; }); }
+
+  function applyTimeouts() {
+    var now = Date.now(), changed = false;
+    entries.forEach(function (e) {
+      if (e.status === 'open' && now - e.out > settings.limit * 60000) {
+        e.status = 'timeout';
+        e.back = null;
+        e.note = (e.note ? e.note + '; ' : '') + 'Zeitüberschreitung (nach ' + settings.limit + ' min automatisch ausgetragen)';
+        changed = true;
+      }
+    });
+    if (changed) saveEntries();
+  }
+
+  var toastTimer = null;
+  function toast(msg) {
+    var t = document.getElementById('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { t.classList.remove('show'); }, 2200);
+  }
+
+  function showCheck(kind, who, what) {
+    var c = document.getElementById('check');
+    document.getElementById('checkWho').textContent = who;
+    document.getElementById('checkWhat').textContent = what;
+    c.className = 'check show ' + kind;
+    setTimeout(function () { c.className = 'check'; show('home'); }, 1300);
+  }
+
+  // ---------- Navigation ----------
+  function show(id) {
+    applyTimeouts();
+    var views = document.querySelectorAll('.view');
+    for (var i = 0; i < views.length; i++) views[i].classList.remove('active');
+    document.getElementById('view-' + id).classList.add('active');
+    document.querySelector('main').scrollTop = 0;
+    if (id === 'go') renderGo();
+    if (id === 'back') renderBack();
+    if (id === 'home') renderHome();
+    if (id !== 'admin') unlocked = false;   // Lehrerbereich beim Verlassen wieder sperren
+    if (id === 'admin') renderAdmin();
+    if (id === 'today') renderToday('todayTableRO', true);
+  }
+  var navs = document.querySelectorAll('[data-nav]');
+  for (var i = 0; i < navs.length; i++) navs[i].addEventListener('click', function () { show(this.getAttribute('data-nav')); });
+  document.getElementById('btnGo').addEventListener('click', function () { show('go'); });
+  document.getElementById('btnBack').addEventListener('click', function () { show('back'); });
+
+  // ---------- Startseite ----------
+  function renderHome() {
+    var open = openEntries();
+    document.getElementById('backSub').textContent = open.length === 0 ? 'niemand unterwegs' :
+      (open.length === 1 ? '1 Kind unterwegs' : open.length + ' Kinder unterwegs');
+    document.getElementById('openCount').textContent = open.length ? open.length + ' unterwegs' : '';
+    document.title = 'Klo-Liste' + classLabel();
+    var days = (Date.now() - settings.lastExport) / 86400000;
+    var n = document.getElementById('exportNotice');
+    if (!settings.names.length) {
+      n.style.display = 'block';
+      n.textContent = 'Noch keine Namen eingetragen. Lehrkraft: Zahnrad oben rechts antippen.';
+    } else if (entries.length && days >= settings.exportDays) {
+      n.style.display = 'block';
+      n.textContent = 'Hinweis für die Lehrkraft: letzter Export vor ' + Math.floor(days) + ' Tagen, ' + entries.length + ' Einträge gespeichert.';
+    } else n.style.display = 'none';
+  }
+
+  // ---------- Gehen ----------
+  function renderGo() {
+    var grid = document.getElementById('gridGo');
+    grid.innerHTML = '';
+    var open = {}, count = { m: 0, w: 0 };
+    openEntries().forEach(function (e) { open[e.name] = true; count[genderOf(e.name)] = (count[genderOf(e.name)] || 0) + 1; });
+    document.getElementById('goLegend').textContent = 'Unterwegs: ' + (count.w || 0) + ' von ' + settings.maxOut + ' Mädchen, ' + (count.m || 0) + ' von ' + settings.maxOut + ' Buben';
+    settings.names.forEach(function (p) {
+      var b = document.createElement('button');
+      b.textContent = p.n;
+      if (open[p.n]) { b.className = 'out'; b.disabled = true; }
+      else b.addEventListener('click', function () { tryGo(p.n); });
+      grid.appendChild(b);
+    });
+  }
+
+  function tryGo(name) {
+    var g = genderOf(name);
+    var sameOut = openEntries().filter(function (e) { return genderOf(e.name) === g; });
+    if (g !== '?' && sameOut.length >= settings.maxOut) {
+      document.getElementById('blockTitle').textContent = 'Bitte warten';
+      document.getElementById('blockText').textContent = 'Es sind schon ' + sameOut.length + ' ' + groupLabel(g) + ' unterwegs (' +
+        sameOut.map(function (e) { return e.name; }).join(', ') + '). Du kannst gehen, sobald jemand zurück ist.';
+      var bl = document.getElementById('block');
+      bl.className = 'block show';
+      document.getElementById('blockOk').onclick = function () { bl.className = 'block'; show('home'); };
+      document.getElementById('blockExc').onclick = function () {
+        if (!settings.pin) { toast('Erst im Lehrerbereich ein Passwort festlegen'); return; }
+        var p = prompt('Lehrer-Passwort für die Ausnahme:');
+        if (p === null) return;
+        if (p !== settings.pin) { toast('Falsches Passwort'); return; }
+        bl.className = 'block';
+        doGo(name, 'Ausnahme von der Lehrkraft erlaubt');
+      };
+      return;
+    }
+    var p = periodOf(new Date());
+    if (settings.rule4 && p.stunde === '4. Stunde') {
+      document.getElementById('blockTitle').textContent = 'Gerade war große Pause';
+      document.getElementById('blockText').textContent = 'In der 4. Stunde soll eigentlich niemand aufs Klo gehen. Musst du wirklich?';
+      var bl = document.getElementById('block');
+      bl.className = 'block show soft';
+      var ok = document.getElementById('blockOk'), exc = document.getElementById('blockExc');
+      ok.textContent = 'Nein, ich warte'; exc.textContent = 'Ja, ich muss';
+      ok.onclick = function () { bl.className = 'block'; ok.textContent = 'OK, ich warte'; exc.textContent = 'Ausnahme (Lehrer)'; show('home'); };
+      exc.onclick = function () { bl.className = 'block'; ok.textContent = 'OK, ich warte'; exc.textContent = 'Ausnahme (Lehrer)'; doGo(name, 'in der 4. Stunde (nach der großen Pause)'); };
+      return;
+    }
+    doGo(name, '');
+  }
+
+  function doGo(name, note) {
+    var now = Date.now();
+    entries.push({ id: now + '-' + Math.random().toString(36).slice(2, 7), name: name, out: now, back: null, status: 'open', note: note });
+    saveEntries();
+    showCheck('go', name, 'eingetragen um ' + fmtTime(new Date(now)));
+  }
+
+  // ---------- Zurück ----------
+  function renderBack() {
+    var grid = document.getElementById('gridBack');
+    grid.innerHTML = '';
+    var open = openEntries();
+    document.getElementById('backEmpty').style.display = open.length ? 'none' : 'block';
+    var now = Date.now();
+    open.forEach(function (e) {
+      var b = document.createElement('button');
+      b.innerHTML = '<span></span><span class="since"></span>';
+      b.firstChild.textContent = e.name;
+      b.lastChild.textContent = 'seit ' + fmtTime(new Date(e.out)) + ' (' + minutesBetween(e.out, now) + ' min)';
+      b.addEventListener('click', function () {
+        e.status = 'back';
+        e.back = Date.now();
+        saveEntries();
+        showCheck('back', e.name, 'zurück um ' + fmtTime(new Date(e.back)));
+      });
+      grid.appendChild(b);
+    });
+  }
+
+  // ---------- Lehrerbereich ----------
+  var unlocked = false;
+  document.getElementById('gear').addEventListener('click', function () { show('admin'); });
+  document.getElementById('btnToday').addEventListener('click', function () { show('today'); });
+  document.getElementById('pinOk').addEventListener('click', function () {
+    var v = document.getElementById('pin').value.trim();
+    if (!settings.pin) {
+      // erstes Öffnen: Passwort festlegen
+      if (v.length < 3) { toast('Mindestens 3 Zeichen'); return; }
+      settings.pin = v;
+      saveSettings();
+      toast('Passwort festgelegt');
+    } else if (v !== settings.pin) { toast('Falsches Passwort'); return; }
+    unlocked = true;
+    document.getElementById('pin').value = '';
+    renderAdmin();
+  });
+
+  function ttLine(day) {
+    var row = settings.timetable[day] || {}, max = 0, out = [];
+    Object.keys(row).forEach(function (k) { if (+k > max) max = +k; });
+    for (var i = 1; i <= max; i++) out.push(row[i] || '-');
+    return out.join(' ');
+  }
+  function parseTtLine(text) {
+    var row = {};
+    text.trim().split(/\s+/).forEach(function (f, i) { if (f && f !== '-' && i < SLOTS.length) row[i + 1] = f; });
+    return row;
+  }
+
+  function renderAdmin() {
+    document.getElementById('adminLogin').style.display = unlocked ? 'none' : 'block';
+    document.getElementById('adminContent').style.display = unlocked ? 'block' : 'none';
+    document.getElementById('pinLabel').textContent = settings.pin ? 'Passwort' : 'Neues Passwort festlegen';
+    document.getElementById('pinOk').textContent = settings.pin ? 'Öffnen' : 'Festlegen';
+    document.getElementById('pinHint').style.display = settings.pin ? 'none' : 'block';
+    if (!unlocked) return;
+    document.getElementById('names').value = settings.names.map(function (p) { return p.n + ' ' + p.g; }).join('\n');
+    document.getElementById('className').value = settings.className;
+    for (var d = 1; d <= 5; d++) document.getElementById('tt' + d).value = ttLine(d);
+    document.getElementById('rule4').checked = settings.rule4;
+    document.getElementById('limit').value = settings.limit;
+    document.getElementById('maxOut').value = settings.maxOut;
+    document.getElementById('exportDays').value = settings.exportDays;
+    document.getElementById('awakeFrom').value = pad(hm(settings.awakeFrom) / 60 | 0) + ':' + pad(hm(settings.awakeFrom) % 60);
+    document.getElementById('awakeTo').value = pad(hm(settings.awakeTo) / 60 | 0) + ':' + pad(hm(settings.awakeTo) % 60);
+    document.getElementById('dimAfter').value = settings.dimAfter;
+    document.getElementById('newPin').value = '';
+    var sorted = entries.slice().sort(function (a, b) { return a.out - b.out; });
+    document.getElementById('statLine').textContent = entries.length + ' Einträge gespeichert' +
+      (entries.length ? ', vom ' + fmtDate(new Date(sorted[0].out)) + ' bis ' + fmtDate(new Date(sorted[sorted.length - 1].out)) : '') +
+      '. Letzter Export: ' + fmtDate(new Date(settings.lastExport)) + '.';
+    renderToday();
+    renderStats();
+  }
+
+  function renderToday(boxId, readOnly) {
+    var k = dayKey(new Date());
+    var rows = entries.filter(function (e) { return dayKey(new Date(e.out)) === k; });
+    var box = document.getElementById(boxId || 'todayTable');
+    if (!rows.length) { box.innerHTML = '<div class="hint">Heute noch keine Einträge.</div>'; return; }
+    var html = '<table><tr><th>Name</th><th>Stunde</th><th>Hinaus</th><th>Zurück</th><th>Dauer</th><th>Vermerk</th>' + (readOnly ? '' : '<th></th>') + '</tr>';
+    rows.forEach(function (e) {
+      var p = periodOf(new Date(e.out));
+      html += '<tr><td>' + esc(e.name) + '</td><td>' + esc(p.stunde + (p.fach ? ' (' + p.fach + ')' : '')) + '</td><td>' + fmtTime(new Date(e.out)) + '</td><td>' +
+        (e.back ? fmtTime(new Date(e.back)) : (e.status === 'open' ? 'offen' : '')) + '</td><td class="num">' +
+        (e.back ? minutesBetween(e.out, e.back) + ' min' : '') + '</td><td>' + esc(e.note || '') + '</td>' +
+        (readOnly ? '' : '<td><button data-del="' + esc(e.id) + '">Löschen</button></td>') + '</tr>';
+    });
+    box.innerHTML = html + '</table>';
+    var dels = box.querySelectorAll('[data-del]');
+    for (var i = 0; i < dels.length; i++) dels[i].addEventListener('click', function () {
+      var id = this.getAttribute('data-del');
+      var e = entries.filter(function (x) { return x.id === id; })[0];
+      if (!e || !confirm('Eintrag von ' + e.name + ' (' + fmtTime(new Date(e.out)) + ') löschen?')) return;
+      entries = entries.filter(function (x) { return x.id !== id; });
+      saveEntries();
+      renderAdmin();
+    });
+  }
+
+  function statsPerChild(list) {
+    list = list || entries;
+    var map = {};
+    settings.names.forEach(function (p) { map[p.n] = { name: p.n, count: 0, timeouts: 0, exceptions: 0, durSum: 0, durN: 0 }; });
+    list.forEach(function (e) {
+      var s = map[e.name] || (map[e.name] = { name: e.name, count: 0, timeouts: 0, exceptions: 0, durSum: 0, durN: 0 });
+      s.count++;
+      if (e.status === 'timeout') s.timeouts++;
+      if (e.note && e.note.indexOf('Ausnahme') >= 0) s.exceptions++;
+      if (e.back) { s.durSum += minutesBetween(e.out, e.back); s.durN++; }
+    });
+    return Object.keys(map).map(function (k) { return map[k]; }).sort(function (a, b) { return b.count - a.count || a.name.localeCompare(b.name); });
+  }
+
+  function renderStats() {
+    var box = document.getElementById('statsTable');
+    if (!entries.length) { box.innerHTML = '<div class="hint">Noch keine Einträge.</div>'; return; }
+    var html = '<table><tr><th>Name</th><th>Klogänge</th><th>Ø Dauer</th><th>Zeitüberschreitungen</th><th>Ausnahmen</th></tr>';
+    statsPerChild().forEach(function (s) {
+      html += '<tr><td>' + esc(s.name) + '</td><td class="num">' + s.count + '</td><td class="num">' + (s.durN ? Math.round(s.durSum / s.durN) + ' min' : '') +
+        '</td><td class="num">' + s.timeouts + '</td><td class="num">' + s.exceptions + '</td></tr>';
+    });
+    box.innerHTML = html + '</table>';
+  }
+
+  document.getElementById('btnSave').addEventListener('click', function () {
+    var names = [];
+    document.getElementById('names').value.split('\n').forEach(function (line) {
+      var parts = line.trim().split(/\s+/);
+      if (!parts[0]) return;
+      var g = '?', last = parts[parts.length - 1].toLowerCase();
+      if (parts.length > 1 && (last === 'm' || last === 'w')) { g = last; parts.pop(); }
+      names.push({ n: parts.join(' '), g: g });
+    });
+    if (!names.length) { toast('Mindestens ein Name nötig'); return; }
+    var limit = parseInt(document.getElementById('limit').value, 10);
+    var maxOut = parseInt(document.getElementById('maxOut').value, 10);
+    var exportDays = parseInt(document.getElementById('exportDays').value, 10);
+    var dimAfter = parseInt(document.getElementById('dimAfter').value, 10);
+    var awakeFrom = document.getElementById('awakeFrom').value, awakeTo = document.getElementById('awakeTo').value;
+    if (!(limit > 0) || !(maxOut > 0) || !(exportDays > 0) || !(dimAfter >= 0)) { toast('Zahl ungültig'); return; }
+    if (!/^\d\d?:\d\d$/.test(awakeFrom) || !/^\d\d?:\d\d$/.test(awakeTo) || hm(awakeFrom) >= hm(awakeTo)) { toast('Wach-Zeit ungültig'); return; }
+    settings.dimAfter = dimAfter;
+    settings.awakeFrom = awakeFrom;
+    settings.awakeTo = awakeTo;
+    var np = document.getElementById('newPin').value.trim();
+    settings.names = names;
+    settings.className = document.getElementById('className').value.trim();
+    for (var d = 1; d <= 5; d++) settings.timetable[d] = parseTtLine(document.getElementById('tt' + d).value);
+    settings.rule4 = document.getElementById('rule4').checked;
+    settings.limit = limit;
+    settings.maxOut = maxOut;
+    settings.exportDays = exportDays;
+    if (np) settings.pin = np;
+    saveSettings();
+    toast('Gespeichert');
+    renderAdmin();
+  });
+
+  document.getElementById('btnClearAll').addEventListener('click', function () {
+    if (!confirm('Wirklich alle ' + entries.length + ' Einträge löschen? Vorher exportieren!')) return;
+    entries = [];
+    saveEntries();
+    toast('Liste geleert');
+    renderAdmin();
+  });
+
+  document.getElementById('btnExport').addEventListener('click', function () { exportXlsx(); });
+  document.getElementById('btnExportWeek').addEventListener('click', function () { exportXlsx(7); });
+  document.getElementById('btnExportClear').addEventListener('click', function () {
+    if (!entries.length) { toast('Nichts zu exportieren'); return; }
+    // Erst exportieren (das Teilen-Menü braucht das Antippen direkt), dann nachfragen
+    exportXlsx().then(function (ok) {
+      if (!ok) { toast('Export abgebrochen, Liste bleibt'); return; }
+      if (!confirm('Ist die Excel-Datei gespeichert oder verschickt? Dann jetzt alle ' + entries.length + ' Einträge löschen.')) return;
+      entries = [];
+      saveEntries();
+      renderAdmin();
+    });
+  });
+
+  // ---------- Sicherung ----------
+  // iPad und iPhone: Teilen-Menü (Download ist in der Home-Bildschirm-App unzuverlässig). Sonst Download.
+  var isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  function download(blob, fname) {
+    if (isIOS && window.File && navigator.canShare) {
+      var file = new File([blob], fname, { type: blob.type });
+      if (navigator.canShare({ files: [file] })) {
+        return navigator.share({ files: [file] }).then(function () { return true; }, function (err) {
+          return err && err.name === 'AbortError' ? false : saveViaLink(blob, fname);
+        });
+      }
+    }
+    return Promise.resolve(saveViaLink(blob, fname));
+  }
+  function saveViaLink(blob, fname) {
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = fname;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(function () { document.body.removeChild(a); URL.revokeObjectURL(a.href); }, 2000);
+    return true;
+  }
+  function stamp() { var n = new Date(); return n.getFullYear() + '-' + pad(n.getMonth() + 1) + '-' + pad(n.getDate()); }
+
+  document.getElementById('btnBackup').addEventListener('click', function () {
+    var data = JSON.stringify({ app: 'klo-liste', exported: Date.now(), settings: settings, entries: entries });
+    download(new Blob([data], { type: 'application/json' }), 'Klo-Liste_' + fileClass() + 'Sicherung_' + stamp() + '.json').then(function (ok) {
+      if (ok) toast('Sicherung gespeichert');
+    });
+  });
+  document.getElementById('btnRestore').addEventListener('click', function () { document.getElementById('restoreFile').click(); });
+  document.getElementById('restoreFile').addEventListener('change', function () {
+    var f = this.files[0];
+    if (!f) return;
+    var r = new FileReader();
+    r.onload = function () {
+      try {
+        var d = JSON.parse(r.result);
+        if (d.app !== 'klo-liste' || (!d.entries && !d.settings)) throw new Error();
+        var incoming = d.entries || [];
+        var add = incoming.filter(function (e) { return !entries.some(function (x) { return x.id === e.id; }); });
+        var msg = incoming.length ? add.length + ' neue Einträge aus der Datei übernehmen (' + (incoming.length - add.length) + ' sind schon da)?' : 'Klassendatei einlesen?';
+        if (!confirm(msg + ' Namen, Klasse und Stundenplan werden aus der Datei übernommen.')) return;
+        entries = entries.concat(add);
+        if (d.settings) {
+          var pin = settings.pin;
+          settings = fixSettings(d.settings);
+          if (!settings.pin) settings.pin = pin;   // Klassendatei ohne Passwort: bisheriges behalten
+        }
+        saveEntries(); saveSettings();
+        toast('Sicherung eingelesen');
+        renderAdmin();
+      } catch (e) { toast('Datei nicht lesbar'); }
+    };
+    r.readAsText(f);
+    this.value = '';
+  });
+  // ---------- Excel-Export ----------
+  // Liefert ein Promise: true, wenn die Datei gespeichert oder geteilt wurde.
+  function exportXlsx(days) {
+    applyTimeouts();
+    var src = entries;
+    if (days) { var lim = Date.now() - days * 86400000; src = entries.filter(function (e) { return e.out >= lim; }); }
+    if (!src.length) { toast('Nichts zu exportieren'); return Promise.resolve(false); }
+    var rows = [['Datum', 'Tag', 'Name', 'Stunde', 'Fach', 'Hinaus', 'Zurück', 'Dauer (min)', 'Vermerk']];
+    src.slice().sort(function (a, b) { return a.out - b.out; }).forEach(function (e) {
+      var o = new Date(e.out), b = e.back ? new Date(e.back) : null, p = periodOf(o);
+      rows.push([fmtDate(o), WEEKDAYS[o.getDay()], e.name, p.stunde, p.fach, fmtTime(o), b ? fmtTime(b) : '',
+        b ? minutesBetween(e.out, e.back) : '', e.status === 'open' ? 'noch offen' : (e.note || '')]);
+    });
+    var stats = [['Name', 'Klogänge', 'Ø Dauer (min)', 'Zeitüberschreitungen', 'Ausnahmen']];
+    statsPerChild(src).forEach(function (s) {
+      stats.push([s.name, s.count, s.durN ? Math.round(s.durSum / s.durN) : '', s.timeouts, s.exceptions]);
+    });
+    var blob = buildXlsx([
+      { name: 'Liste', rows: rows, widths: [11, 5, 16, 22, 7, 8, 8, 11, 55] },
+      { name: 'Auswertung', rows: stats, widths: [16, 11, 14, 20, 11] }
+    ]);
+    var fname = 'Klo-Liste_' + fileClass() + (days ? 'Woche_' : '') + stamp() + '.xlsx';
+    return download(blob, fname).then(function (ok) {
+      if (!ok) return false;
+      if (!days) { settings.lastExport = Date.now(); saveSettings(); }
+      toast('Export: ' + fname);
+      renderAdmin();
+      return true;
+    });
+  }
+
+  function colName(ci) { return ci < 26 ? String.fromCharCode(65 + ci) : String.fromCharCode(64 + Math.floor(ci / 26)) + String.fromCharCode(65 + ci % 26); }
+
+  function sheetXml(sheet) {
+    var x = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+      '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><cols>';
+    (sheet.widths || []).forEach(function (w, i) { x += '<col min="' + (i + 1) + '" max="' + (i + 1) + '" width="' + w + '" customWidth="1"/>'; });
+    x += '</cols><sheetData>';
+    sheet.rows.forEach(function (r, ri) {
+      x += '<row r="' + (ri + 1) + '">';
+      r.forEach(function (v, ci) {
+        var ref = colName(ci) + (ri + 1);
+        if (typeof v === 'number') x += '<c r="' + ref + '"><v>' + v + '</v></c>';
+        else if (v !== '') x += '<c r="' + ref + '" t="inlineStr"' + (ri === 0 ? ' s="1"' : '') + '><is><t>' + esc(v) + '</t></is></c>';
+      });
+      x += '</row>';
+    });
+    return x + '</sheetData></worksheet>';
+  }
+
+  function buildXlsx(sheets) {
+    var ct = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>';
+    var wb = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets>';
+    var rels = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rIdS" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>';
+    var files = [];
+    sheets.forEach(function (s, i) {
+      var n = i + 1;
+      ct += '<Override PartName="/xl/worksheets/sheet' + n + '.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>';
+      wb += '<sheet name="' + esc(s.name) + '" sheetId="' + n + '" r:id="rId' + n + '"/>';
+      rels += '<Relationship Id="rId' + n + '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet' + n + '.xml"/>';
+      files.push(['xl/worksheets/sheet' + n + '.xml', sheetXml(s)]);
+    });
+    files.unshift(
+      ['[Content_Types].xml', ct + '</Types>'],
+      ['_rels/.rels', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>'],
+      ['xl/workbook.xml', wb + '</sheets></workbook>'],
+      ['xl/_rels/workbook.xml.rels', rels + '</Relationships>'],
+      ['xl/styles.xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><fonts count="2"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font></fonts><fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills><borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="2"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1"/></cellXfs></styleSheet>']
+    );
+    return new Blob([zipStore(files)], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  }
+
+  // ZIP ohne Kompression
+  var crcTable = (function () {
+    var t = [], c;
+    for (var n = 0; n < 256; n++) {
+      c = n;
+      for (var k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+      t[n] = c >>> 0;
+    }
+    return t;
+  })();
+  function crc32(bytes) {
+    var c = 0xFFFFFFFF;
+    for (var i = 0; i < bytes.length; i++) c = crcTable[(c ^ bytes[i]) & 0xFF] ^ (c >>> 8);
+    return (c ^ 0xFFFFFFFF) >>> 0;
+  }
+  function utf8(str) {
+    if (window.TextEncoder) return new TextEncoder().encode(str);
+    var s = unescape(encodeURIComponent(str)), a = new Uint8Array(s.length);
+    for (var i = 0; i < s.length; i++) a[i] = s.charCodeAt(i);
+    return a;
+  }
+  function zipStore(files) {
+    var parts = [], central = [], offset = 0;
+    var d = new Date();
+    var dosTime = (d.getHours() << 11) | (d.getMinutes() << 5) | (d.getSeconds() >> 1);
+    var dosDate = ((d.getFullYear() - 1980) << 9) | ((d.getMonth() + 1) << 5) | d.getDate();
+    function u16(v) { return [v & 0xFF, (v >> 8) & 0xFF]; }
+    function u32(v) { return [v & 0xFF, (v >>> 8) & 0xFF, (v >>> 16) & 0xFF, (v >>> 24) & 0xFF]; }
+    files.forEach(function (f) {
+      var name = utf8(f[0]), data = utf8(f[1]), crc = crc32(data);
+      var local = [].concat(u32(0x04034b50), u16(20), u16(0x0800), u16(0), u16(dosTime), u16(dosDate), u32(crc), u32(data.length), u32(data.length), u16(name.length), u16(0));
+      parts.push(new Uint8Array(local), name, data);
+      central.push(new Uint8Array([].concat(u32(0x02014b50), u16(20), u16(20), u16(0x0800), u16(0), u16(dosTime), u16(dosDate), u32(crc), u32(data.length), u32(data.length), u16(name.length), u16(0), u16(0), u16(0), u16(0), u32(0), u32(offset))), name);
+      offset += local.length + name.length + data.length;
+    });
+    var cdSize = central.reduce(function (s, a) { return s + a.length; }, 0);
+    var end = new Uint8Array([].concat(u32(0x06054b50), u16(0), u16(0), u16(files.length), u16(files.length), u32(cdSize), u32(offset), u16(0)));
+    var total = offset + cdSize + end.length, out = new Uint8Array(total), p = 0;
+    parts.concat(central, [end]).forEach(function (a) { out.set(a, p); p += a.length; });
+    return out;
+  }
+
+  // ---------- Uhr und Timeout-Prüfung ----------
+  function tick() {
+    var now = new Date();
+    document.getElementById('clock').textContent = fmtTime(now);
+    document.getElementById('today').textContent = WEEKDAYS[now.getDay()] + ', ' + fmtDate(now);
+    var p = periodOf(now);
+    document.getElementById('periodNow').textContent = p.stunde + (p.fach ? ' (' + p.fach + ')' : '');
+    var before = openEntries().length;
+    applyTimeouts();
+    if (openEntries().length !== before) show(document.querySelector('.view.active').id.replace('view-', ''));
+    else renderHome();
+    if (!inAwakeTime(now)) releaseAwake();
+    checkDim(now);
+  }
+
+  // Wach-Zeit: nur Mo–Fr zwischen awakeFrom und awakeTo. Außerhalb sperrt sich das Tablet nach seiner eigenen Automatischen Sperre.
+  function hm(t) { var p = String(t).split(':'); return (+p[0]) * 60 + (+p[1]); }
+  function inAwakeTime(d) {
+    var day = d.getDay(), m = d.getHours() * 60 + d.getMinutes();
+    return day >= 1 && day <= 5 && m >= hm(settings.awakeFrom) && m < hm(settings.awakeTo);
+  }
+  function releaseAwake() {
+    if (wakeLock) { try { wakeLock.release(); } catch (e) {} wakeLock = null; }
+    var v = document.getElementById('awake');
+    if (!v.paused) { try { v.pause(); } catch (e) {} }
+  }
+
+  // Dunkel bei Ruhe: nach dimAfter Minuten ohne Antippen auf der Startseite. Der erste Tipper weckt nur auf.
+  var lastTouch = Date.now();
+  function checkDim(now) {
+    var dim = document.getElementById('dim');
+    if (!settings.dimAfter || dim.classList.contains('show')) return;
+    var home = document.getElementById('view-home').classList.contains('active');
+    var busy = document.getElementById('check').classList.contains('show') || document.getElementById('block').classList.contains('show');
+    if (home && !busy && now - lastTouch >= settings.dimAfter * 60000) {
+      document.getElementById('dimClock').textContent = fmtTime(new Date(now));
+      dim.classList.add('show');
+    }
+  }
+  document.getElementById('dim').addEventListener('click', function (e) {
+    e.stopPropagation();
+    lastTouch = Date.now();
+    this.classList.remove('show');
+    keepAwake();
+  });
+  document.addEventListener('touchstart', function () { lastTouch = Date.now(); }, { passive: true, capture: true });
+  document.addEventListener('click', function () { lastTouch = Date.now(); }, true);
+
+  // Bildschirm wach halten: Wake Lock, wo vorhanden, sonst unsichtbares Video in Schleife. Start beim ersten Antippen.
+  var wakeLock = null;
+  var standalone = navigator.standalone || (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches);
+  function keepAwake() {
+    if (!inAwakeTime(new Date())) { releaseAwake(); return; }
+    if ('wakeLock' in navigator && !wakeLock) {
+      try {
+        navigator.wakeLock.request('screen').then(function (l) {
+          wakeLock = l;
+          l.addEventListener('release', function () { wakeLock = null; });
+        }, function () {});
+      } catch (e) {}
+    }
+    var v = document.getElementById('awake');
+    if (v.paused) { try { var pr = v.play(); if (pr && pr.catch) pr.catch(function () {}); } catch (e) {} }
+    // Vollbild beim ersten Antippen anfordern (geht nur aus einer Berührung heraus; als Home-Bildschirm-App nicht nötig)
+    var el = document.documentElement;
+    var isFull = standalone || document.fullscreenElement || document.webkitFullscreenElement;
+    if (!isFull) {
+      try {
+        var req = el.requestFullscreen || el.webkitRequestFullscreen;
+        if (req) { var fp = req.call(el); if (fp && fp.catch) fp.catch(function () {}); }
+      } catch (e) {}
+    }
+  }
+  document.addEventListener('touchstart', keepAwake, { passive: true });
+  document.addEventListener('click', keepAwake);
+  document.addEventListener('visibilitychange', function () { if (!document.hidden) keepAwake(); });
+
+  // Offline-Speicher: nach dem ersten Laden startet die App auch ohne Internet
+  if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
+    try { navigator.serviceWorker.register('sw.js').catch(function () {}); } catch (e) {}
+  }
+
+  tick();
+  setInterval(tick, 15000);
+  document.addEventListener('visibilitychange', function () { if (!document.hidden) tick(); });
+  show('home');
+})();
+</script>
+</body>
+</html>
